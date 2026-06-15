@@ -8,7 +8,7 @@
   <!-- IMPORTANT: Replace this Id with your own GUID for production use -->
   <!-- Generate one at: https://www.guidgenerator.com/ -->
   <Id>e3b5c8a2-4d7f-4e9b-8c1a-f6d2e5b7c3a9</Id>
-  <Version>1.0.0.3</Version>
+  <Version>1.0.0.4</Version>
   <ProviderName>ETD Security</ProviderName>
   <DefaultLocale>en-US</DefaultLocale>
   <DisplayName DefaultValue="DLP Email Guard"/>
@@ -67,7 +67,7 @@
       <Hosts>
         <Host xsi:type="MailHost">
           <Runtimes>
-            <Runtime resid="CommandsHtmlUrl" lifetime="short"/>
+            <Runtime resid="CommandsUrl" lifetime="short"/>
           </Runtimes>
 
           <DesktopFormFactor>
@@ -88,9 +88,8 @@
           <bt:Image id="icon32" DefaultValue="https://kc11381.github.io/TestAddin/dist/assets/icon.png"/>
         </bt:Images>
         <bt:Urls>
-          <bt:Url id="CommandsHtmlUrl" DefaultValue="https://kc11381.github.io/TestAddin/dist/commands.html"/>
-          <bt:Url id="CommandsUrl"     DefaultValue="https://kc11381.github.io/TestAddin/dist/commands.js"/>
-          <bt:Url id="DialogUrl"       DefaultValue="https://kc11381.github.io/TestAddin/dist/dialog.html"/>
+          <bt:Url id="CommandsUrl" DefaultValue="https://kc11381.github.io/TestAddin/dist/commands.js"/>
+          <bt:Url id="DialogUrl"   DefaultValue="https://kc11381.github.io/TestAddin/dist/dialog.html"/>
         </bt:Urls>
         <bt:ShortStrings>
           <bt:String id="GroupLabel" DefaultValue="DLP Email Guard"/>
