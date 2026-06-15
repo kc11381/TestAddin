@@ -67,9 +67,7 @@
       <Hosts>
         <Host xsi:type="MailHost">
           <Runtimes>
-            <Runtime resid="CommandsRuntime" lifetime="short">
-              <Override type="javascript" resid="CommandsUrl"/>
-            </Runtime>
+            <Runtime resid="CommandsUrl" lifetime="short"/>
           </Runtimes>
 
           <DesktopFormFactor>
@@ -94,8 +92,7 @@
           <bt:Url id="DialogUrl"   DefaultValue="https://kc11381.github.io/TestAddin/dist/dialog.html"/>
         </bt:Urls>
         <bt:ShortStrings>
-          <bt:String id="CommandsRuntime" DefaultValue="CommandsRuntime"/>
-          <bt:String id="GroupLabel"      DefaultValue="DLP Email Guard"/>
+          <bt:String id="GroupLabel" DefaultValue="DLP Email Guard"/>
         </bt:ShortStrings>
         <bt:LongStrings>
           <bt:String id="Description" DefaultValue="Scans outgoing emails for sensitive content."/>
