@@ -67,7 +67,9 @@
       <Hosts>
         <Host xsi:type="MailHost">
           <Runtimes>
-            <Runtime resid="CommandsUrl" lifetime="short"/>
+            <Runtime resid="CommandsHtmlUrl" lifetime="short">
+              <Override type="javascript" resid="CommandsUrl"/>
+            </Runtime>
           </Runtimes>
 
           <DesktopFormFactor>
@@ -88,8 +90,9 @@
           <bt:Image id="icon32" DefaultValue="https://kc11381.github.io/TestAddin/dist/assets/icon.png"/>
         </bt:Images>
         <bt:Urls>
-          <bt:Url id="CommandsUrl" DefaultValue="https://kc11381.github.io/TestAddin/dist/commands.js"/>
-          <bt:Url id="DialogUrl"   DefaultValue="https://kc11381.github.io/TestAddin/dist/dialog.html"/>
+          <bt:Url id="CommandsHtmlUrl" DefaultValue="https://kc11381.github.io/TestAddin/dist/commands.html"/>
+          <bt:Url id="CommandsUrl"     DefaultValue="https://kc11381.github.io/TestAddin/dist/commands.js"/>
+          <bt:Url id="DialogUrl"       DefaultValue="https://kc11381.github.io/TestAddin/dist/dialog.html"/>
         </bt:Urls>
         <bt:ShortStrings>
           <bt:String id="GroupLabel" DefaultValue="DLP Email Guard"/>
