@@ -1,1 +1,122 @@
-(()=>{"use strict";function e(e,t){e.notificationMessages.addAsync("dlp-warning",{type:Office.MailboxEnums.ItemNotificationMessageType.InformationalMessage,message:t,icon:"icon16",persistent:!1})}"undefined"!=typeof window&&(window.onMessageSendHandler=function(t){(async function(t){const n=Office.context.mailbox.item;let o,a,i;try{console.log("[DLP] Step 1: calling getSubject..."),o=await function(e){return new Promise((t,n)=>{e.subject.getAsync(e=>{e.status===Office.AsyncResultStatus.Failed?n(new Error("Could not read subject")):t(e.value||"")})})}(n),console.log("[DLP] Step 2: got subject:",o),a=await function(e){return new Promise((t,n)=>{e.body.getAsync(Office.CoercionType.Text,e=>{e.status===Office.AsyncResultStatus.Failed?n(new Error("Could not read body")):t(e.value||"")})})}(n),console.log("[DLP] Step 3: got body length:",a?.length)}catch(o){return console.error("[DLP] getAsync failed:",o),e(n,"DLP scan unavailable — sending without check"),void t.completed({allowEvent:!0})}try{console.log("[DLP] Step 4: calling analyzeEmail..."),i=await async function(e,t){const n=e||"",o=(t||"").substring(0,4e3),a=new AbortController,i=setTimeout(()=>a.abort(),3e3);try{const e=await fetch("https://9bq2s133w8.execute-api.us-east-1.amazonaws.com/analyze",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({subject:n,body:o}),signal:a.signal});if(!e.ok)throw clearTimeout(i),new Error(`SLM returned ${e.status}`);const t=await e.json();return clearTimeout(i),t}catch(e){throw clearTimeout(i),e}}(o,a),console.log("[DLP] Step 5: analyzeEmail result:",JSON.stringify(i))}catch(o){return console.error("[DLP] analyzeEmail failed:",o.name,o.message),e(n,`DLP error: ${o.name} - ${o.message}`),void t.completed({allowEvent:!0})}var s,c;i.sensitive?Office.context.ui.displayDialogAsync((s=i.reason,c=i.confidence,`https://kc11381.github.io/TestAddin/dist/dialog.html?data=${encodeURIComponent(JSON.stringify({reason:s,confidence:c}))}`),{height:40,width:40,promptBeforeOpen:!1},a=>{if(a.status===Office.AsyncResultStatus.Failed)return e(n,"DLP scan unavailable — sending without check"),void t.completed({allowEvent:!0});const i=a.value;let s=!1;function c(e){s||(s=!0,t.completed(e))}i.addEventHandler(Office.EventType.DialogMessageReceived,t=>{i.close();const a=t.message;"encrypt"===a?function(t,n,o){!function(e){return e.startsWith("[SECURE]")}(n)?t.subject.setAsync(`[SECURE] ${n}`,n=>{n.status===Office.AsyncResultStatus.Failed&&e(t,"Failed to set [SECURE] prefix — sending unencrypted"),o({allowEvent:!0})}):o({allowEvent:!0})}(n,o,c):c("sendAnyway"===a?{allowEvent:!0}:{allowEvent:!1})}),i.addEventHandler(Office.EventType.DialogEventReceived,t=>{12006===t.error?c({allowEvent:!1}):(e(n,"DLP scan unavailable — sending without check"),c({allowEvent:!0}))})}):t.completed({allowEvent:!0})})(t).catch(()=>{e(Office.context.mailbox.item,"DLP scan unavailable — sending without check"),t.completed({allowEvent:!0})})})})();
+/*
+ * Outlook OnMessageSend handler.
+ * This file is loaded by dist/commands.html.
+ */
+
+Office.onReady(() => {
+  console.log("[DLP] Office.js ready in commands runtime");
+});
+
+/**
+ * Main Outlook send-event handler.
+ * The name must match the FunctionName in manifest.xml:
+ *
+ * <LaunchEvent Type="OnMessageSend" FunctionName="onMessageSendHandler" SendMode="SoftBlock"/>
+ */
+async function onMessageSendHandler(event) {
+  console.log("[DLP] onMessageSendHandler started");
+
+  try {
+    const item = Office.context.mailbox.item;
+
+    const subject = await getSubject(item);
+    const body = await getBody(item);
+
+    console.log("[DLP] Subject:", subject);
+    console.log("[DLP] Body length:", body.length);
+    console.log("[DLP] About to call fetch");
+
+    const response = await fetch("https://9bq2s133w8.execute-api.us-east-1.amazonaws.com/analyze", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        subject: subject || "",
+        body: (body || "").substring(0, 4000)
+      })
+    });
+
+    console.log("[DLP] Fetch completed with status:", response.status);
+
+    if (!response.ok) {
+      console.error("[DLP] API returned non-OK status:", response.status);
+
+      // Soft-fail open so mail is not blocked if API has an issue.
+      event.completed({
+        allowEvent: true
+      });
+
+      return;
+    }
+
+    const result = await response.json();
+
+    console.log("[DLP] API result:", result);
+
+    if (result && result.sensitive) {
+      event.completed({
+        allowEvent: false,
+        errorMessage: result.reason || "Sensitive content detected. Please review this email before sending."
+      });
+
+      return;
+    }
+
+    event.completed({
+      allowEvent: true
+    });
+  } catch (error) {
+    console.error("[DLP] Error in onMessageSendHandler:", error);
+
+    // Fail open during debugging.
+    // Change this to allowEvent:false later if your policy requires blocking on errors.
+    event.completed({
+      allowEvent: true
+    });
+  }
+}
+
+/**
+ * Gets email subject.
+ */
+function getSubject(item) {
+  return new Promise((resolve, reject) => {
+    try {
+      item.subject.getAsync((result) => {
+        if (result.status === Office.AsyncResultStatus.Succeeded) {
+          resolve(result.value || "");
+        } else {
+          reject(result.error);
+        }
+      });
+    } catch (error) {
+      reject(error);
+    }
+  });
+}
+
+/**
+ * Gets email body as plain text.
+ */
+function getBody(item) {
+  return new Promise((resolve, reject) => {
+    try {
+      item.body.getAsync(Office.CoercionType.Text, (result) => {
+        if (result.status === Office.AsyncResultStatus.Succeeded) {
+          resolve(result.value || "");
+        } else {
+          reject(result.error);
+        }
+      });
+    } catch (error) {
+      reject(error);
+    }
+  });
+}
+
+/**
+ * Required for event-based Outlook add-ins.
+ * The string must match the FunctionName in manifest.xml.
+ */
+Office.actions.associate("onMessageSendHandler", onMessageSendHandler);
