@@ -5,12 +5,11 @@
   xmlns:bt="http://schemas.microsoft.com/office/officeappbasictypes/1.0"
   xsi:type="MailApp">
 
-  <!-- IMPORTANT: Replace this Id with your own GUID for production use -->
-  <!-- Generate one at: https://www.guidgenerator.com/ -->
   <Id>e3b5c8a2-4d7f-4e9b-8c1a-f6d2e5b7c3a9</Id>
-  <Version>1.0.0.6</Version>
+  <Version>1.0.0.7</Version>
   <ProviderName>ETD Security</ProviderName>
   <DefaultLocale>en-US</DefaultLocale>
+
   <DisplayName DefaultValue="DLP Email Guard"/>
   <Description DefaultValue="Scans outgoing emails for sensitive content and enables Cisco CRES encryption."/>
 
@@ -21,6 +20,7 @@
   <AppDomains>
     <AppDomain>https://kc11381.github.io</AppDomain>
     <AppDomain>https://54-237-226-189.nip.io</AppDomain>
+    <AppDomain>https://9bq2s133w8.execute-api.us-east-1.amazonaws.com</AppDomain>
   </AppDomains>
 
   <Hosts>
@@ -41,16 +41,13 @@
     </Form>
   </FormSettings>
 
-  <Permissions>ReadWriteItem</Permissions>
+  <!-- Required for sendAsync used by Encrypt and Send function command -->
+  <Permissions>ReadWriteMailbox</Permissions>
 
   <Rule xsi:type="RuleCollection" Mode="Or">
     <Rule xsi:type="ItemIs" ItemType="Message" FormType="Edit"/>
   </Rule>
 
-  <!-- VersionOverrides V1_0 wrapper required before V1_1 -->
-  <!-- Note: V1_0 block is intentionally empty — clients that only support V1_0 -->
-  <!-- (Outlook 2016 pre-update) will fall back to FormSettings and send without DLP check. -->
-  <!-- This is acceptable for the MVP. -->
   <VersionOverrides
     xmlns="http://schemas.microsoft.com/office/mailappversionoverrides"
     xsi:type="VersionOverridesV1_0">
@@ -61,7 +58,8 @@
 
       <Requirements>
         <bt:Sets>
-          <bt:Set Name="Mailbox" MinVersion="1.12"/>
+          <!-- 1.15 needed for Smart Alerts commandId + sendAsync flow -->
+          <bt:Set Name="Mailbox" MinVersion="1.15"/>
         </bt:Sets>
       </Requirements>
 
@@ -74,10 +72,39 @@
           </Runtimes>
 
           <DesktopFormFactor>
-            <FunctionFile resid="CommandsUrl"/>
+            <FunctionFile resid="CommandsHtmlUrl"/>
+
+            <!-- Ribbon button / function command used by Smart Alerts commandId -->
+            <ExtensionPoint xsi:type="MessageComposeCommandSurface">
+              <OfficeTab id="TabDefault">
+                <Group id="DlpEmailGuardGroup">
+                  <Label resid="GroupLabel"/>
+                  <Control xsi:type="Button" id="encryptAndSendCommand">
+                    <Label resid="EncryptAndSend.Label"/>
+                    <Supertip>
+                      <Title resid="EncryptAndSend.Label"/>
+                      <Description resid="EncryptAndSend.Tooltip"/>
+                    </Supertip>
+                    <Icon>
+                      <bt:Image size="16" resid="icon16"/>
+                      <bt:Image size="32" resid="icon32"/>
+                      <bt:Image size="80" resid="icon80"/>
+                    </Icon>
+                    <Action xsi:type="ExecuteFunction">
+                      <FunctionName>encryptAndSendHandler</FunctionName>
+                    </Action>
+                  </Control>
+                </Group>
+              </OfficeTab>
+            </ExtensionPoint>
+
+            <!-- Event-based send handler -->
             <ExtensionPoint xsi:type="LaunchEvent">
               <LaunchEvents>
-                <LaunchEvent Type="OnMessageSend" FunctionName="onMessageSendHandler" SendMode="SoftBlock"/>
+                <LaunchEvent
+                  Type="OnMessageSend"
+                  FunctionName="onMessageSendHandler"
+                  SendMode="PromptUser"/>
               </LaunchEvents>
               <SourceLocation resid="CommandsHtmlUrl"/>
             </ExtensionPoint>
@@ -89,21 +116,25 @@
         <bt:Images>
           <bt:Image id="icon16" DefaultValue="https://kc11381.github.io/TestAddin/dist/assets/icon.png"/>
           <bt:Image id="icon32" DefaultValue="https://kc11381.github.io/TestAddin/dist/assets/icon.png"/>
+          <bt:Image id="icon80" DefaultValue="https://kc11381.github.io/TestAddin/dist/assets/icon.png"/>
         </bt:Images>
+
         <bt:Urls>
           <bt:Url id="CommandsHtmlUrl" DefaultValue="https://kc11381.github.io/TestAddin/dist/commands.html"/>
-          <bt:Url id="CommandsUrl"     DefaultValue="https://kc11381.github.io/TestAddin/dist/commands.js"/>
-          <bt:Url id="DialogUrl"       DefaultValue="https://kc11381.github.io/TestAddin/dist/dialog.html"/>
+          <bt:Url id="CommandsUrl" DefaultValue="https://kc11381.github.io/TestAddin/dist/commands.js"/>
+          <bt:Url id="DialogUrl" DefaultValue="https://kc11381.github.io/TestAddin/dist/dialog.html"/>
         </bt:Urls>
+
         <bt:ShortStrings>
           <bt:String id="GroupLabel" DefaultValue="DLP Email Guard"/>
+          <bt:String id="EncryptAndSend.Label" DefaultValue="Encrypt and Send"/>
         </bt:ShortStrings>
+
         <bt:LongStrings>
           <bt:String id="Description" DefaultValue="Scans outgoing emails for sensitive content."/>
+          <bt:String id="EncryptAndSend.Tooltip" DefaultValue="Prepends [ENCRYPT] to the subject and sends the message."/>
         </bt:LongStrings>
       </Resources>
-
     </VersionOverrides>
   </VersionOverrides>
-
 </OfficeApp>
