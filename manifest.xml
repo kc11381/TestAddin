@@ -1,234 +1,140 @@
-/*
- * Outlook Smart Alerts DLP handler.
- *
- * Flow:
- * 1. User clicks Send.
- * 2. OnMessageSend scans subject/body.
- * 3. If sensitive:
- *    - Show Smart Alert.
- *    - User can choose:
- *      a) Encrypt and Send -> function command adds [ENCRYPT] and sends.
- *      b) Send Anyway -> Outlook sends as-is.
- *      c) Don't Send -> message stays open.
- */
+<?xml version="1.0" encoding="UTF-8"?>
+<OfficeApp
+  xmlns="http://schemas.microsoft.com/office/appforoffice/1.1"
+  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+  xmlns:bt="http://schemas.microsoft.com/office/officeappbasictypes/1.0"
+  xsi:type="MailApp">
 
-Office.onReady(() => {
-  console.log("[DLP] Office.js ready");
-});
+  <Id>e3b5c8a2-4d7f-4e9b-8c1a-f6d2e5b7c3a9</Id>
+  <Version>1.0.0.7</Version>
+  <ProviderName>ETD Security</ProviderName>
+  <DefaultLocale>en-US</DefaultLocale>
 
-const API_URL = "https://9bq2s133w8.execute-api.us-east-1.amazonaws.com/analyze";
-const ENCRYPT_PREFIX = "[ENCRYPT]";
+  <DisplayName DefaultValue="DLP Email Guard"/>
+  <Description DefaultValue="Scans outgoing emails for sensitive content and enables Cisco CRES encryption."/>
 
-/**
- * Main OnMessageSend handler.
- * This must match manifest:
- * FunctionName="onMessageSendHandler"
- */
-async function onMessageSendHandler(event) {
-  console.log("[DLP] onMessageSendHandler started");
+  <IconUrl DefaultValue="https://kc11381.github.io/TestAddin/dist/assets/icon.png"/>
+  <HighResolutionIconUrl DefaultValue="https://kc11381.github.io/TestAddin/dist/assets/icon.png"/>
+  <SupportUrl DefaultValue="https://kc11381.github.io/TestAddin"/>
 
-  try {
-    const item = Office.context.mailbox.item;
+  <AppDomains>
+    <AppDomain>https://kc11381.github.io</AppDomain>
+    <AppDomain>https://54-237-226-189.nip.io</AppDomain>
+    <AppDomain>https://9bq2s133w8.execute-api.us-east-1.amazonaws.com</AppDomain>
+  </AppDomains>
 
-    const subject = await getSubject(item);
-    console.log("[DLP] Subject:", subject);
+  <Hosts>
+    <Host Name="Mailbox"/>
+  </Hosts>
 
-    // If user already selected Encrypt and Send, allow send.
-    if (hasEncryptPrefix(subject)) {
-      console.log("[DLP] Subject already encrypted. Allowing send.");
-      event.completed({ allowEvent: true });
-      return;
-    }
+  <Requirements>
+    <Sets>
+      <Set Name="Mailbox" MinVersion="1.1"/>
+    </Sets>
+  </Requirements>
 
-    const body = await getBody(item);
-    console.log("[DLP] Body length:", body.length);
+  <FormSettings>
+    <Form xsi:type="ItemEdit">
+      <DesktopSettings>
+        <SourceLocation DefaultValue="https://kc11381.github.io/TestAddin/dist/dialog.html"/>
+      </DesktopSettings>
+    </Form>
+  </FormSettings>
 
-    const result = await analyzeEmail(subject, body);
-    console.log("[DLP] API result:", result);
+  <!-- Required for sendAsync used by Encrypt and Send function command -->
+  <Permissions>ReadWriteMailbox</Permissions>
 
-    if (result && result.sensitive) {
-      const reason = result.reason || "Sensitive content detected.";
+  <Rule xsi:type="RuleCollection" Mode="Or">
+    <Rule xsi:type="ItemIs" ItemType="Message" FormType="Edit"/>
+  </Rule>
 
-      event.completed({
-        allowEvent: false,
+  <VersionOverrides
+    xmlns="http://schemas.microsoft.com/office/mailappversionoverrides"
+    xsi:type="VersionOverridesV1_0">
 
-        // Message shown in Outlook Smart Alert.
-        errorMessage:
-          `${reason}\n\nChoose "Encrypt and Send" to prepend [ENCRYPT] to the subject, or choose "Send Anyway" to send without encryption.`,
+    <VersionOverrides
+      xmlns="http://schemas.microsoft.com/office/mailappversionoverrides/1.1"
+      xsi:type="VersionOverridesV1_1">
 
-        // This shows Outlook's built-in "Send Anyway" option.
-        sendModeOverride: Office.MailboxEnums.SendModeOverride.PromptUser,
+      <Requirements>
+        <bt:Sets>
+          <!-- 1.15 needed for Smart Alerts commandId + sendAsync flow -->
+          <bt:Set Name="Mailbox" MinVersion="1.15"/>
+        </bt:Sets>
+      </Requirements>
 
-        // This adds a Smart Alert action button.
-        // This ID must match the manifest Control id.
-        commandId: "encryptAndSendCommand",
+      <Hosts>
+        <Host xsi:type="MailHost">
+          <Runtimes>
+            <Runtime resid="CommandsHtmlUrl" lifetime="short">
+              <Override type="javascript" resid="CommandsUrl"/>
+            </Runtime>
+          </Runtimes>
 
-        // Label for the action button. Max 20 chars.
-        cancelLabel: "Encrypt and Send"
-      });
+          <DesktopFormFactor>
+            <FunctionFile resid="CommandsHtmlUrl"/>
 
-      return;
-    }
+            <!-- Ribbon button / function command used by Smart Alerts commandId -->
+            <ExtensionPoint xsi:type="MessageComposeCommandSurface">
+              <OfficeTab id="TabDefault">
+                <Group id="DlpEmailGuardGroup">
+                  <Label resid="GroupLabel"/>
+                  <Control xsi:type="Button" id="encryptAndSendCommand">
+                    <Label resid="EncryptAndSend.Label"/>
+                    <Supertip>
+                      <Title resid="EncryptAndSend.Label"/>
+                      <Description resid="EncryptAndSend.Tooltip"/>
+                    </Supertip>
+                    <Icon>
+                      <bt:Image size="16" resid="icon16"/>
+                      <bt:Image size="32" resid="icon32"/>
+                      <bt:Image size="80" resid="icon80"/>
+                    </Icon>
+                    <Action xsi:type="ExecuteFunction">
+                      <FunctionName>encryptAndSendHandler</FunctionName>
+                    </Action>
+                  </Control>
+                </Group>
+              </OfficeTab>
+            </ExtensionPoint>
 
-    console.log("[DLP] No sensitive content. Allowing send.");
-    event.completed({ allowEvent: true });
-  } catch (error) {
-    console.error("[DLP] Error in onMessageSendHandler:", error);
+            <!-- Event-based send handler -->
+            <ExtensionPoint xsi:type="LaunchEvent">
+              <LaunchEvents>
+                <LaunchEvent
+                  Type="OnMessageSend"
+                  FunctionName="onMessageSendHandler"
+                  SendMode="PromptUser"/>
+              </LaunchEvents>
+              <SourceLocation resid="CommandsHtmlUrl"/>
+            </ExtensionPoint>
+          </DesktopFormFactor>
+        </Host>
+      </Hosts>
 
-    // During testing, fail open.
-    // For strict DLP, change allowEvent to false.
-    event.completed({
-      allowEvent: true
-    });
-  }
-}
+      <Resources>
+        <bt:Images>
+          <bt:Image id="icon16" DefaultValue="https://kc11381.github.io/TestAddin/dist/assets/icon.png"/>
+          <bt:Image id="icon32" DefaultValue="https://kc11381.github.io/TestAddin/dist/assets/icon.png"/>
+          <bt:Image id="icon80" DefaultValue="https://kc11381.github.io/TestAddin/dist/assets/icon.png"/>
+        </bt:Images>
 
-/**
- * Smart Alert action button handler.
- * This runs when user clicks "Encrypt and Send".
- *
- * This requires:
- * - Mailbox requirement set 1.15
- * - ReadWriteMailbox permission
- * - Function command in manifest with id="encryptAndSendCommand"
- */
-async function encryptAndSendHandler(event) {
-  console.log("[DLP] encryptAndSendHandler started");
+        <bt:Urls>
+          <bt:Url id="CommandsHtmlUrl" DefaultValue="https://kc11381.github.io/TestAddin/dist/commands.html"/>
+          <bt:Url id="CommandsUrl" DefaultValue="https://kc11381.github.io/TestAddin/dist/commands.js"/>
+          <bt:Url id="DialogUrl" DefaultValue="https://kc11381.github.io/TestAddin/dist/dialog.html"/>
+        </bt:Urls>
 
-  try {
-    const item = Office.context.mailbox.item;
+        <bt:ShortStrings>
+          <bt:String id="GroupLabel" DefaultValue="DLP Email Guard"/>
+          <bt:String id="EncryptAndSend.Label" DefaultValue="Encrypt and Send"/>
+        </bt:ShortStrings>
 
-    const currentSubject = await getSubject(item);
-    const newSubject = hasEncryptPrefix(currentSubject)
-      ? currentSubject
-      : `${ENCRYPT_PREFIX} ${currentSubject || ""}`;
-
-    console.log("[DLP] Setting encrypted subject:", newSubject);
-
-    await setSubject(item, newSubject);
-
-    console.log("[DLP] Subject updated. Sending message.");
-
-    await sendMessage(item);
-
-    // Function command completion.
-    if (event && typeof event.completed === "function") {
-      event.completed();
-    }
-  } catch (error) {
-    console.error("[DLP] Encrypt and Send failed:", error);
-
-    const item = Office.context.mailbox.item;
-    addNotification(item, "Failed to encrypt and send. Please try again.");
-
-    if (event && typeof event.completed === "function") {
-      event.completed();
-    }
-  }
-}
-
-async function analyzeEmail(subject, body) {
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 5000);
-
-  try {
-    const response = await fetch(API_URL, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json"
-      },
-      body: JSON.stringify({
-        subject: subject || "",
-        body: (body || "").substring(0, 4000)
-      }),
-      signal: controller.signal
-    });
-
-    clearTimeout(timeout);
-
-    if (!response.ok) {
-      throw new Error(`DLP API returned ${response.status}`);
-    }
-
-    return await response.json();
-  } catch (error) {
-    clearTimeout(timeout);
-    throw error;
-  }
-}
-
-function getSubject(item) {
-  return new Promise((resolve, reject) => {
-    item.subject.getAsync((result) => {
-      if (result.status === Office.AsyncResultStatus.Succeeded) {
-        resolve(result.value || "");
-      } else {
-        reject(result.error);
-      }
-    });
-  });
-}
-
-function setSubject(item, subject) {
-  return new Promise((resolve, reject) => {
-    item.subject.setAsync(subject, (result) => {
-      if (result.status === Office.AsyncResultStatus.Succeeded) {
-        resolve();
-      } else {
-        reject(result.error);
-      }
-    });
-  });
-}
-
-function getBody(item) {
-  return new Promise((resolve, reject) => {
-    item.body.getAsync(Office.CoercionType.Text, (result) => {
-      if (result.status === Office.AsyncResultStatus.Succeeded) {
-        resolve(result.value || "");
-      } else {
-        reject(result.error);
-      }
-    });
-  });
-}
-
-function sendMessage(item) {
-  return new Promise((resolve, reject) => {
-    if (!item.sendAsync) {
-      reject(new Error("sendAsync is not supported in this Outlook client."));
-      return;
-    }
-
-    item.sendAsync((result) => {
-      if (result.status === Office.AsyncResultStatus.Succeeded) {
-        resolve();
-      } else {
-        reject(result.error);
-      }
-    });
-  });
-}
-
-function hasEncryptPrefix(subject) {
-  return (subject || "").trim().toUpperCase().startsWith(ENCRYPT_PREFIX);
-}
-
-function addNotification(item, message) {
-  try {
-    item.notificationMessages.addAsync("dlp-warning", {
-      type: Office.MailboxEnums.ItemNotificationMessageType.InformationalMessage,
-      message,
-      icon: "icon16",
-      persistent: false
-    });
-  } catch (error) {
-    console.error("[DLP] Failed to add notification:", error);
-  }
-}
-
-/**
- * Required registrations.
- */
-Office.actions.associate("onMessageSendHandler", onMessageSendHandler);
-Office.actions.associate("encryptAndSendHandler", encryptAndSendHandler);
+        <bt:LongStrings>
+          <bt:String id="Description" DefaultValue="Scans outgoing emails for sensitive content."/>
+          <bt:String id="EncryptAndSend.Tooltip" DefaultValue="Prepends [ENCRYPT] to the subject and sends the message."/>
+        </bt:LongStrings>
+      </Resources>
+    </VersionOverrides>
+  </VersionOverrides>
+</OfficeApp>
